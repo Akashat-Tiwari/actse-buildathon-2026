@@ -1,0 +1,67 @@
+# Environments & Packages
+.venv/
+venv/
+ENV/
+env/
+env.bak/
+venv.bak/
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# Python & Caching
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.pytest_cache/
+.coverage
+htmlcov/
+.mypy_cache/
+.ruff_cache/
+
+# Large Datasets & ML Artifacts
+*.csv
+*.tsv
+*.parquet
+*.pkl
+*.pickle
+*.joblib
+*.h5
+*.onnx
+*.pt
+*.pth
+*.bin
+*.weights
+
+# Databases & Local Storage
+*.db
+*.sqlite
+*.sqlite3
+*.rdb
+*.log
+
+# Environment Variables & Secrets
+.env
+.env.local
+.env.*.local
+*.env
+*.pem
+*.key
+
+# Build & Distribution
+build/
+dist/
+*.egg-info/
+out/
+.next/
+
+# IDEs & System Files
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
