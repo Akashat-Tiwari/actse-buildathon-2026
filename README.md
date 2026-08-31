@@ -9,7 +9,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-emerald.svg)](LICENSE)
 
 ---
-## 🎥 Pitch & Demo Video
+## Pitch & Demo Video
 [Watch the ACTSE Pitch Video Here](https://drive.google.com/file/d/1RST9Uc9ZDE82KSTmsgU8MWb7zIphLz0w/view?usp=sharing)
 
 
