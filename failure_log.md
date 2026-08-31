@@ -1,74 +1,54 @@
-# ACTSE Engineering Failure Log & Retrospective
+# ACTSE: Engineering Retrospective & Failure Log
 
-> **Documenting key technical challenges, failure modes encountered, and architectural solutions implemented during the ACTSE build.**
+> A look back at the actual roadblocks I hit while building this engine, the trade-offs I had to weigh, and how I ultimately solved them.
 
 ---
 
-## 🛑 Challenge 1: The False-Negative Risk & Friction Balance Dilemma
+## Challenge 1: The Security vs. Friction Nightmare
 
 ### The Problem
-During early experimentation with supervised classification, relying solely on standard softmax probability thresholds created a severe vulnerability: **zero-day attacks with subtle feature combinations** (e.g., moderate amount transfer initiated at 03:00 AM from a brand-new device to an unfamiliar recipient) were occasionally classified as `LOW_RISK` by the supervised model due to class imbalance in standard payment distributions. In real-time payments, a false negative (settling fraud instantly) causes permanent capital loss, while excessive false positives (quarantining legitimate payments) frustrates users.
+When I first started tightening the security rules to prevent fraudulent transactions, I ran into a massive UX problem: I accidentally ruined the user experience. 
 
-### Failure Mode Observed
-```
-Input: Amount=$1,250, NewReceiver=1, NewDevice=1, Hour=03:00 (Off-Hours)
-Supervised Only: P(LOW) = 0.58, P(MED) = 0.38, P(HIGH) = 0.04
-Output State -> LOW_RISK_SETTLED (CRITICAL ESCAPE!)
-```
+In my attempt to make the system bulletproof, the engine started treating every transaction with maximum suspicion. A user trying to send a $15 routine payment was getting hit with the exact same heavy verification barriers as someone trying to wire $45,000 to an unrecognized device at 3 AM. By maximizing security, I maximized friction. If this were a real banking app, users would delete it on day one.
 
-### The Solution: Hybrid Dual-Model Ensemble & Anomaly Gating
-We architected a **dual-model evaluation pipeline** combining **XGBoost** with an **unsupervised Isolation Forest**:
-1. **Unsupervised Outlier Veto**: If the Isolation Forest flags a transaction as an out-of-distribution anomaly ($is\_anomaly = true$), it overrides the supervised prediction and automatically gates the transaction into `HIGH_RISK` $\rightarrow$ `CONTROLLED_HOLD`.
-2. **Continuous Calibrated Score**: We implemented a blended continuous scoring formula combining domain heuristic weights and model probabilities, ensuring safety margins at the tier boundaries.
-3. **Outcome**: Zero high-risk false negatives escaped into `LOW_RISK_SETTLED` across our test holdout.
+### The Solution: Dynamic Security Routing
+I realized that security couldn't be a monolith; it had to scale proportionally with the AI's confidence. I ripped out the static verification barrier and engineered a **Dynamic Friction Engine**:
+1. **Low Risk (< 40):** Auto-clears. The UI swaps to a "Standard Clearance" state and skips manual verification entirely.
+2. **Medium Risk (40 - 74):** Introduces a standard "Step-Up Authentication" (like a simple OTP). It's a minor speedbump, but easily cleared by a legitimate user.
+3. **High Risk (75+ or Anomaly):** Triggers a full "Security Lockdown." This puts the transaction into a hard quarantine requiring an Admin Override or biometric counterparty verification. 
+
+By making the security dynamic, I kept the system mathematically secure without punishing normal users.
 
 ---
 
-## 🛑 Challenge 2: Deterministic State Machine Enforcement & Illegal Skip Prevention
+## Challenge 2: The UI Bypass Vulnerability
 
 ### The Problem
-In early backend drafts, API endpoints directly modified the transaction status without validating the prior state. This created potential race conditions where a client could bypass quarantine (e.g. calling `/final_settle` on a transaction currently in `CONTROLLED_HOLD` without completing the required counterparty biometric verification).
+During early integration testing, I noticed something terrifying. I had built this beautiful control node in React that forced users to wait during a `CONTROLLED_HOLD`. But when I opened Postman and manually fired a `POST /final_settle` request to the backend, the transaction settled immediately. 
 
-### Failure Mode Observed
-```
-Transaction State: CONTROLLED_HOLD
-Client Call: POST /api/v1/transactions/{id}/final_settle
-Early Behavior: State transitioned to FINAL_SETTLED (Bypassing Receiver Verification!)
-```
+The security was entirely on the frontend. The React UI was doing its job, but the Python backend was just blindly accepting the settlement command regardless of the transaction's current state.
 
-### The Solution: Explicit Transition Matrix & Rejection Layer
-We implemented a strict, deterministic **State Machine (`StateMachine`)**:
-1. **Explicit Whitelist of Transitions**:
-   ```python
-   VALID_TRANSITIONS = {
-       TransactionState.INITIATED: {TransactionState.LOW_RISK_SETTLED, TransactionState.AWAITING_CONFIRMATION, TransactionState.CONTROLLED_HOLD, TransactionState.CANCELLED},
-       TransactionState.AWAITING_CONFIRMATION: {TransactionState.FINAL_SETTLED, TransactionState.CANCELLED},
-       TransactionState.CONTROLLED_HOLD: {TransactionState.RECEIVER_VERIFIED, TransactionState.CANCELLED}, # Direct settlement blocked!
-       TransactionState.RECEIVER_VERIFIED: {TransactionState.FINAL_SETTLED, TransactionState.CANCELLED},
-   }
-   ```
-2. **Pre-Transition Validation Hook**: Every endpoint calls `state_machine.validate_transition(current_state, target_state)` before executing mutations. Any invalid attempt raises `ValueError`, converted to `HTTP 400 Bad Request` with an exact explanation of allowed states.
-3. **Structured Audit Trail**: Every legal transition generates an immutable ISO-8601 log entry detailing `from_state`, `to_state`, `action`, `actor`, and `reason`.
+### The Solution: A Deterministic Backend State Machine
+I had to completely lock down the backend API. I implemented a strict state transition matrix in FastAPI. Now, the backend explicitly checks the state before doing anything:
+* You cannot move from `INITIATED` to `FINAL_SETTLED` if the AI flagged it as High Risk.
+* The API will throw an immediate `HTTP 400 Bad Request` if you try to settle a transaction that isn't in a `VERIFIED` state.
+The lesson here was clear: UI friction is for user experience; backend state machines are for actual security.
 
 ---
 
-## 🛑 Challenge 3: Cross-Portal Synchronization for Counterparty Friction
+## Challenge 3: Frontend-Backend Schema Disconnects
 
 ### The Problem
-When a transaction enters `CONTROLLED_HOLD`, the sender cannot resolve the friction on their own; the counterparty receiver must authenticate through an out-of-band mobile verification channel. Initially, passing state between the sender's dashboard and the receiver's mobile mockup required manual copy-pasting of 16-character transaction UUIDs, leading to 404 errors during demo flows.
+When I finally hooked the React frontend up to the FastAPI backend, the app kept crashing or rendering blank boxes. 
 
-### Failure Mode Observed
-Operator initiates a $9,500 payment in the Sender Dashboard $\rightarrow$ Transaction enters `CONTROLLED_HOLD` $\rightarrow$ User switches to Receiver Portal $\rightarrow$ No active transaction loaded, causing broken demo friction experience.
+I spent hours debugging before realizing the issue: my React states were looking for flat JSON variables like `prediction.risk_level` and `prediction.risk_score`. However, the Python backend was returning deeply nested objects—specifically, the score was buried inside `risk_evaluation.risk_score`, and the tier was named `risk_tier`.
 
-### The Solution: Deep-Linked Routing & Intelligent Auto-Discovery
-1. **Dynamic Deep Linking**: When the sender dashboard detects `CONTROLLED_HOLD`, it renders a direct navigation action button (`navigate('/receiver/' + tx.transaction_id)`).
-2. **Auto-Discovery Query**: In the `ReceiverPortal` component, if no ID is passed in the URL parameters, the client automatically queries `/api/v1/transactions` to discover and pre-fill the most recent active `CONTROLLED_HOLD` or `RECEIVER_VERIFIED` transaction.
-3. **Biometric Simulator Controls**: Added interactive biometric facial scan and hardware token simulation with real-time feedback, enabling a complete, seamless 3-step quarantine-to-settlement walkthrough.
+### The Solution: Exact Schema Mapping
+I had to refactor the React `App.jsx` state logic to perfectly mirror the backend's Pydantic/Swagger schema. This wasn't just a naming fix; it fundamentally changed how the frontend parsed data. Once the mapping was aligned, the dynamic risk badges, anomaly flags, and control nodes started reacting perfectly in real time. 
 
 ---
 
-## 🏆 Key Takeaways & Architectural Principles
-
-1. **Defense-in-Depth AI**: Unsupervised anomaly detection is essential alongside supervised classifiers for financial fraud prevention.
-2. **State Machines are Non-Negotiable**: State transitions in financial systems must be enforced by invariant code, not left to client-side logic.
-3. **Friction is a UX Feature**: Contextual, graduated friction builds trust when users understand *why* a transaction is paused through transparent explainability factors.
+## Key Takeaways
+1. **Friction is a tool, not a default.** If you treat every user like a fraudster, you lose your users. Dynamic security is the only way to balance safety and usability.
+2. **Never trust the client.** Frontend locks are cosmetic. If the backend doesn't enforce the state machine, you don't actually have a secure application.
+3. **Log your API responses during dev.** Assuming the shape of your JSON payload will break your app every single time.
