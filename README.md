@@ -10,7 +10,7 @@
 
 ---
 
-## ⚡ The Elevator Pitch
+## Why I Built This
 
 Traditional payment settlement engines operate on **static, rigid rule thresholds**—either blindly passing transactions into irreversible clearing or aggressively declining legitimate users with clumsy verification barriers. In modern real-time payments (RTP, FedNow, UPI, CBDCs), this binary approach costs billions in fraud, chargeback disputes, and customer churn.
 
@@ -21,7 +21,7 @@ Traditional payment settlement engines operate on **static, rigid rule threshold
 
 ---
 
-## 🏛 System Architecture
+## System Architecture
 
 ACTSE is architected into three clean decoupled layers:
 
@@ -67,7 +67,7 @@ flowchart TD
 
 ---
 
-## 🔄 Core State Machine
+## Core State Machine
 
 ACTSE enforces a strictly deterministic state transition matrix. Any illegal state skip (e.g. attempting to settle directly from `CONTROLLED_HOLD`) is rejected at the API boundary with an immediate `HTTP 400 Bad Request`.
 
@@ -108,7 +108,7 @@ stateDiagram-v2
 
 ---
 
-## 🚀 How to Run Locally
+## How to Run Locally
 
 ### Prerequisites
 - **Python 3.10+** (Tested on Python 3.11 / 3.13)
@@ -161,7 +161,7 @@ npm run dev
 
 ---
 
-## 📊 ML Risk Models & Evaluation Highlights
+## ML Risk Models & Evaluation Highlights
 
 - **Supervised Model**: Multiclass **XGBoost Classifier** ($90.90\%$ Accuracy, $0.9027$ Weighted F1).
   - **Zero False-Negative Guarantee**: Zero `HIGH_RISK` transactions misclassified as `LOW_RISK`.
@@ -170,5 +170,9 @@ npm run dev
 
 ---
 
-## 📄 License
+## License
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+
+
+
