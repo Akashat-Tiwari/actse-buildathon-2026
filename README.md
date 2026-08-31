@@ -161,6 +161,18 @@ npm run dev
 
 ---
 
+## Engineering Challenges & Retrospective
+
+Building a system that actively blocks fraud without ruining the user experience came with some serious technical hurdles. During development, I ran into three major roadblocks:
+
+1. **The Security vs. Friction Tradeoff:** Hardening security initially resulted in terrible UX, blocking normal users. This directly led to engineering the Dynamic Security Routing logic.
+2. **The UI Bypass Vulnerability:** Realizing frontend locks are cosmetic, requiring a complete refactor of the backend to enforce a strict, deterministic state machine.
+3. **Client-Server Schema Disconnects:** Debugging silent UI crashes caused by nested JSON payload mismatches between FastAPI and React.
+
+For a full breakdown of these failures, the trade-offs considered, and how they were solved, check out the **[failure_log.md](failure_log.md)** file.
+
+---
+
 ## ML Risk Models & Evaluation Highlights
 
 - **Supervised Model**: Multiclass **XGBoost Classifier** ($90.90\%$ Accuracy, $0.9027$ Weighted F1).
